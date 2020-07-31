@@ -106,44 +106,46 @@ def Slope(Radius,BinCount,centre,high):
 	return Slope
 
 def correlation_dim(d_data):
-	#start_time = time.time() 
+ 
 	Radius = Distance(d_data)
-	#print("--- %s seconds ---" % (time.time() - start_time))
-	#start_time = time.time()
 	BinCount = BinFilling(d_data,Radius)
-	#print("--- %s seconds ---" % (time.time() - start_time))
-	#start_time = time.time() 
 	RadiusNormal = Radius/Radius[31]
-	#print("--- %s seconds ---" % (time.time() - start_time))
 	#plt.loglog(RadiusNormal,BinCount,basex=np.e,basey=np.e)
 	Slp = Slope(Radius,BinCount,0.6,0.125)
 	#plt.show()	
 	return Slp
 
 def tryme(j, i, x):
-    #find FD
-    print("iteration variable I", i)  
-    print("iteration variable J", j)
+
+    #find FD - capture time 
     start_time = time.time()
     h = correlation_dim(x)
-    print("--- %s seconds ---" % (time.time() - start_time))
+    duration = (time.time() - start_time)
+    
     #deleting a band
     x1 = np.delete(x, j, 1)
-    # #sanity check
-    print("X shape: ", x.shape, " X1 shape: ", x1.shape)
+    
     #find partial FD
     h1 = correlation_dim(x1)
+    
     #find absolute difference between FD and partial FD 
     diff = abs(h1-h) 
-    print(diff)
-    #store the fractal dimension after removal of that band
-    return [diff, h1]
+    
+    #sanity check
+    print("X shape: ", x.shape, " X1 shape: ", x1.shape)
+    print("iteration variable I", i)  
+    print("iteration variable J", j)
+    print("Difference is: ", diff)
+    print("------- Time taken: ", duration, " seconds -------")
+    
+    return [diff, h1, duration]
 
 
 ## Main - Find optimal Dimension - Supervised
 
 if __name__ == '__main__':
     
+    #load data
     img = loadmat('Indian_pines_corrected.mat')
     img_gt = loadmat('Indian_pines_gt.mat')
     img = img['indian_pines_corrected']
@@ -155,48 +157,35 @@ if __name__ == '__main__':
     img_gt = np.reshape(img_gt, [height*width,])
     img = preprocessing.normalize(img.astype('float32'))
     num_classes = len(np.unique(img_gt))
-
-    print("Number of Classes: ", num_classes)
-
-    class_dist = [] 
-    for i in range(1, num_classes):
-        #fetch indices corresponding to class i 
-        class_index = np.nonzero(img_gt == i)[0].tolist()
-        #append the obtained list as an item to the main list 
-        class_dist.append(class_index)
         
+    #separate background and selet 2000 points
+    img_cp = img
     x = img[img_gt!=0,:]
-    shufflePermutation = np.random.permutation(len(x))
-    x = x[shufflePermutation]
     x = x[:2000,:]
+    
     #x_list = manager.list(x.tolist())
     
+    #stoarage
     diff = np.arange(bands*bands*1.0).reshape((bands, bands))*0 + 1
-    #diff_list = manager.list(diff.tolist())
-    
-    h1_matrix = np.arange(bands*bands*1.0).reshape((bands, bands))*0 + 1 
-    #x1_matrix_list = manager.list(x1_matrix.tolist())
-   
-    h = correlation_dim(x)
-    print(h)
-
-    #should be equal to number of bands
-    print("X shape: ", x.shape) 
-    #Initialize info storing table
+    h1_matrix = np.arange(bands*bands*1.0).reshape((bands, bands))*0 + 1
+    dur_matrix = np.arange(bands*bands*1.0).reshape((bands, bands))*0
     table = [] 
-    #array for the sequential FD plot - FD vs #attributes considered
     FD_plot = []
-    #Initialize diff storing 2-D array - initialize difference storage var to 1 as to act as +inf for change in FD
-    #diff = np.arange(bands*bands*1.0).reshape((bands, bands))*0 + 1 
-    #store matrix- x[i,j] denote the fractal dimension in the i'th iteration after removing the j'th band in x(updated one)
-    #x1_matrix = np.arange(bands*bands*1.0).reshape((bands, bands))*0 + 1 
-    #setting optimal dimension as 5. We will inspect the plot obtained and then come here again to change the value.
-    opt_dim = 17
-
+   
+    #sanity checks
+    h = correlation_dim(x)
     print("Number of processors: ", mp.cpu_count())
+    print("Number of Classes: ", num_classes)
+    print("X shape: ", x.shape) 
+    print("FD of X is: ", h)
+    
+    #setting optimal dimension as 15 so that we can get the etire plot/graph
+    opt_dim = 15
+    limit = 5
     
     #Iterating after removal of one band with min Fractal change
-    for i in range(bands-opt_dim):
+    for i in range(bands-limit):
+    
         #Iterating to find band with min Fractal change
         pool = mp.Pool(24)
         myrange = [(iter, i, x) for iter in range(bands-i)]
@@ -204,27 +193,34 @@ if __name__ == '__main__':
         pool.close()
         pool.join()
         
-        #compute index of min difference in FD and partial FD 
+        #extracting returned parameters
         output_array = np.array(output)
-    
         diff[i,0:(bands-i)] = output_array[:,0]
         h1_matrix[i,0:(bands-i)] = output_array[:,1]
+        dur_matrix[i,0:(bands-i)] = output_array[:,2]
         
+        #compute index of min difference in FD and partial FD
         min_index_col = np.argmin(diff[i,], axis=0) 
-        #Store details in info table
+        
+        #Store details
         table.append([ i, diff[i,min_index_col], min_index_col, x.shape,  h1_matrix[i,min_index_col]])
-        #store FD values of min difference column
         FD_plot.append(h1_matrix[i, min_index_col])
+        
         #sanity checks
-        print(x.shape)
-        print(min_index_col)
-        print("************************ I have completed a loop   *********")
-        #reset x after deleting band causing min change in FD or having highest correlation
+        print("current x shape: ", x.shape)
+        print("min diff(FD) column index", min_index_col)
+        print("************************ I have completed a loop   *************************")
+        
+        #reset `x` and `img_cp` after deleting band causing min change in FD or having highest correlation
         x = np.delete(x, min_index_col, 1)
+        img_cp = np.delete(img_cp, min_index_col, 1)
+        
         #save result
-        if i>=170:
-            name = "test2_reduced_" + str(bands-i-1) + ".npy"
+        if i>=170 and i<=(bands-opt_dim-1):
+            name_x = "test3_reduced_" + str(bands-i-1) + ".npy"
+            name_img = "test3_reduced_img_" + str(bands-i-1) + ".npy"
             np.save(name, x)
+            np.save(name_img, img_cp)
             
 
     """## > Results
@@ -234,13 +230,13 @@ if __name__ == '__main__':
 
     #defining table headers
     headers = ["Iteration", "Minimum fractal Diff", "Band with Min Diff", "New Shape", "New X"]
-    #print table
     print(tabulate(table, headers, tablefmt="github"))
+    
     #save the info table in a CSV file
     df = pd.DataFrame(table, columns= headers)
-    df.to_csv (r'Test2_FD_iter.csv', index = False, header=True)
+    df.to_csv (r'Test3_FD_iter.csv', index = False, header=True)
 
-    """### > Plot"""
+    """### > Plot Difference"""
 
     #make an array of the min differences (change in FD) 
     min_fd = np.min(diff, axis=1)
@@ -251,15 +247,38 @@ if __name__ == '__main__':
     fig.suptitle('Fractal Dimension Difference vs Bands Removed')
     plt.xlabel('ith iteration (i bands removed)')
     plt.ylabel('Difference in FD')
+    
     #save the result
-    fig.savefig('Test2_Result1.jpg',dpi=300)
+    fig.savefig('Test3_diff.jpg',dpi=300)
+    
 
     """### > Smooth"""
 
     #smooth the fractal plot over a zoomed window frame
     y = savgol_filter(min_fd[170:193], 9,3)
+    
     #display the smoothed plot and save the results
     fig1 = plt.figure()
     plt.plot(y)
-    fig1.savefig('Test2_Result2.jpg',dpi=300)
+    
+    #save result
+    fig1.savefig('Test3_smoothdiff.jpg',dpi=300)
+    
+    """### > Plot Partial FD"""
+
+    #plot the differnce as function of removed bands
+    fig = plt.figure()
+    plt.plot(FD_plot[:193])
+    fig.suptitle('New Fractal Dimension vs Bands Removed')
+    plt.xlabel('ith iteration (i bands removed)')
+    plt.ylabel('New Fractal Dimension')
+    
+    #save the result
+    fig.savefig('Test3_newFD.jpg',dpi=300)
+    
+    """### > Save time duration """
+
+    #save the duration matrix in a CSV file
+    df = pd.DataFrame(dur_matrix)
+    df.to_csv (r'Test3_Duration.csv', index = False)
 
