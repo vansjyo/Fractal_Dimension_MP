@@ -219,7 +219,7 @@ if __name__ == '__main__':
         if i>=170 and i<=(bands-opt_dim-1):
             name_x = "test3_reduced_" + str(bands-i-1) + ".npy"
             name_img = "test3_reduced_img_" + str(bands-i-1) + ".npy"
-            np.save(name, x)
+            np.save(name_x, x)
             np.save(name_img, img_cp)
             
 
