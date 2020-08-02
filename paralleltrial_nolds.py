@@ -155,7 +155,8 @@ if __name__ == '__main__':
     #reshape data to 2-D array and normalize the reflectance values
     img = np.reshape(img, [height*width, bands])
     img_gt = np.reshape(img_gt, [height*width,])
-    img = preprocessing.normalize(img.astype('float32'))
+    min_max_scaler = preprocessing.MinMaxScaler()
+    img = min_max_scaler.fit_transform(img.astype('float32')) 
     num_classes = len(np.unique(img_gt))
         
     #separate background and selet 2000 points
